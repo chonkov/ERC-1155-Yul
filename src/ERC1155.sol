@@ -117,16 +117,6 @@ contract ERC1155 is IERC1155 {
         }
     }
 
-    // ERC165
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == 0x01ffc9a7 // ERC165 Interface ID for ERC165
-            || interfaceId == 0xd9b67a26 // ERC165 Interface ID for ERC1155
-            || interfaceId == 0x0e89341c; // ERC165 Interface ID for ERC1155MetadataURI
-    }
-
-    // ERC1155 Metadata URI
-    function uri(uint256 id) public view virtual returns (string memory) {}
-
     // Internal functions
     function _mint(address to, uint256 id, uint256 value, bytes memory data) internal {
         require(to != address(0), "to = 0 address");
