@@ -34,6 +34,11 @@ object "ERC1155" {
       ///                                         Write functions                                     ///
       ///                                                                                             ///
       ///////////////////////////////////////////////////////////////////////////////////////////////////
+      // safeTransferFrom(address,address,uint256,uint256,bytes)
+      case 0xf242432a {
+        safeTransferFrom(decodeAsAddress(0), decodeAsAddress(1), decodeAsUint(2), decodeAsUint(3))
+        returnTrue()
+      }
       // setApprovalForAll(address,bool)
       case 0xa22cb465 {
         setApprovalForAll(decodeAsAddress(0), decodeAsBool(1))
@@ -66,7 +71,7 @@ object "ERC1155" {
       function hash(slot, value) -> v {
         mstore(0x00, value)
         mstore(0x20, slot)
-        v := keccak256(0x00, 0x20)
+        v := keccak256(0x00, 0x40)
       }
 
       function returnUint(v) {
@@ -106,28 +111,62 @@ object "ERC1155" {
       //   firstSlot := add(0x24, pointer)
       // }
 
-      function calculateDoubleMapping(slot, key1, key2) -> v {
-        v := hash(hash(slot, key1), key2)
+      function getSlot(slot, key1, key2) -> v {
+        v := hash(key2, hash(slot, key1))
       }
 
       function mint(to, id, amount) {
-        let slot := calculateDoubleMapping(balances(), to, id)
+        let slot := getSlot(balances(), to, id)
         sstore(slot, amount)
       }
 
+      function safeTransferFrom(from, to, id, amount) {
+        if iszero(or(eq(caller(), from), isApprovedForAll(from, caller()))) {
+          revert(0x00, 0x00)
+        }
+
+        if iszero(to) {
+          revert(0x00, 0x00)
+        }
+
+        _safeTransferFrom(from, to, id, amount)
+      }
+
+      function _safeTransferFrom(from, to, id, amount) {
+        let fromSlot := getSlot(balances(), from, id)
+        let toSlot := getSlot(balances(), to, id)
+
+        let fromOld := sload(fromSlot)
+        let toOld := sload(toSlot)
+
+        let fromNew := sub(fromOld, amount)
+        let toNew := add(toOld, amount)
+
+        if gt(fromNew, fromOld) {
+          revert(0x00, 0x00)
+        }
+
+        if lt(toNew, toOld) {
+          revert(0x00, 0x00)
+        }
+
+        sstore(fromSlot, fromNew)
+        sstore(toSlot, add(toOld, amount))
+      }
+
       function setApprovalForAll(operator, isApproved) {
-        let slot := calculateDoubleMapping(operatorApprovals(), caller(), operator)
+        let slot := getSlot(operatorApprovals(), caller(), operator)
         sstore(slot, isApproved)
       }
 
       function balanceOf(owner, id) -> v {
-        let offset := calculateDoubleMapping(balances(), owner, id)
-        v := sload(offset)
+        let slot := getSlot(balances(), owner, id)
+        v := sload(slot)
       }
 
       function isApprovedForAll(owner, operator) -> v {
-        let offset := calculateDoubleMapping(operatorApprovals(), owner, operator)
-        v := sload(offset)
+        let slot := getSlot(operatorApprovals(), owner, operator)
+        v := sload(slot)
       }
     }
    }
