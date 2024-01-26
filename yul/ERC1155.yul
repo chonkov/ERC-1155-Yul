@@ -53,6 +53,11 @@ object "ERC1155" {
       case 0x00fdd58e {
         returnUint(balanceOf(decodeAsAddress(0), decodeAsUint(1)))
       }
+      // balanceOfBatch(address[],uint256[])
+      case 0x4e1273f4 {
+        let from, to := balanceOfBatch(decodeAsUint(0), decodeAsUint(1))
+        return(from, to)
+      }
       // isApprovedForAll(address,address)
       case 0xe985e9c5 {
         returnUint(isApprovedForAll(decodeAsAddress(0), decodeAsAddress(1)))
@@ -103,13 +108,12 @@ object "ERC1155" {
         v := and(0x01, v)
       }
 
-      // function decodeAsArray(pointer) -> size,firstSlot {
-      //   size := calldataload(add(4, pointer))
-      //   if lt(calldatasize(), add(pointer, mul(size, 0x20))) {
-      //       revert(0, 0)
-      //     }
-      //   firstSlot := add(0x24, pointer)
-      // }
+      function decodeAsArray(pointer) -> size {
+        size := calldataload(add(4, pointer))
+        if lt(calldatasize(), add(pointer, mul(size, 0x20))) {
+            revert(0, 0)
+          }
+      }
 
       function getSlot(slot, key1, key2) -> v {
         v := hash(key2, hash(slot, key1))
@@ -130,6 +134,8 @@ object "ERC1155" {
         }
 
         _safeTransferFrom(from, to, id, amount)
+
+        _onERC1155Received(from, to, id, amount)
       }
 
       function _safeTransferFrom(from, to, id, amount) {
@@ -151,7 +157,26 @@ object "ERC1155" {
         }
 
         sstore(fromSlot, fromNew)
-        sstore(toSlot, add(toOld, amount))
+        sstore(toSlot, toNew)
+      }
+
+      function _onERC1155Received(from, to, id, amount) {
+        if eq(extcodesize(to), 0x00) { return(0x00, 0x00) }
+
+        mstore(0x00, 0x39150de800000000000000000000000000000000000000000000000000000000)
+        mstore(0x04, caller())
+        mstore(0x24, from)
+        mstore(0x44, id)
+        mstore(0x64, amount)
+
+        let success := call(gas(), to, 0x00, 0x00, 0x84, 0x00, 0x00)
+        returndatacopy(0x00, 0x00, returndatasize())
+
+        if iszero(success) { revert(0x00, 0x00) }
+        // 0x39150de8 != 0xf23a6e61
+        if iszero(eq(shr(0xe0, mload(0x00)), 0xf23a6e61)) {
+          revert(0x00, 0x00)
+        }
       }
 
       function setApprovalForAll(operator, isApproved) {
@@ -162,6 +187,42 @@ object "ERC1155" {
       function balanceOf(owner, id) -> v {
         let slot := getSlot(balances(), owner, id)
         v := sload(slot)
+      }
+
+      function balanceOfBatch(ownersOffset, idsOffset) -> start, end
+      {
+        let ownersLength := decodeAsArray(ownersOffset)
+        let idsLength := decodeAsArray(idsOffset)
+
+        if iszero(eq(ownersLength, idsLength)) {
+          revert(0x00, 0x00)
+        }
+
+        // @audit Why If I start from 0x00, the tx reverts (I can start from 0x40) 
+        let memPtr := 0x80
+        start := memPtr
+
+        mstore(memPtr, 0x20) // offset
+        memPtr := add(memPtr, 0x20)
+
+        mstore(memPtr, ownersLength)
+        memPtr := add(memPtr, 0x20)
+
+        for { let i := 0x00 } lt(i, ownersLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+          let currentOwnerOffset := add(iterationOffset, add(0x04, ownersOffset))
+          let currentIdOffset := add(iterationOffset, add(0x04, idsOffset))
+
+          let owner := calldataload(currentOwnerOffset)
+          let id := calldataload(currentIdOffset)
+
+          let _balance := balanceOf(owner, id)
+
+          mstore(memPtr, _balance)
+          memPtr := add(memPtr, 0x20)
+        }
+
+        end := memPtr
       }
 
       function isApprovedForAll(owner, operator) -> v {
