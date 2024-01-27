@@ -120,8 +120,14 @@ object "ERC1155" {
       }
 
       function mint(to, id, amount) {
+        if eq(to, 0x00) { revert(0x00, 0x00) }
+
         let slot := getSlot(balances(), to, id)
+        let currentBalance := sload(slot)
+        amount := add(amount, currentBalance)
         sstore(slot, amount)
+
+        _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, 0x00, to, id, amount)
       }
 
       function safeTransferFrom(from, to, id, amount) {
@@ -135,7 +141,7 @@ object "ERC1155" {
 
         _safeTransferFrom(from, to, id, amount)
 
-        _onERC1155Received(from, to, id, amount)
+        _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, from, to, id, amount)
       }
 
       function _safeTransferFrom(from, to, id, amount) {
@@ -160,21 +166,24 @@ object "ERC1155" {
         sstore(toSlot, toNew)
       }
 
-      function _onERC1155Received(from, to, id, amount) {
+      function _onERC1155Received(signature, from, to, id, amount) {
         if eq(extcodesize(to), 0x00) { return(0x00, 0x00) }
 
-        mstore(0x00, 0x39150de800000000000000000000000000000000000000000000000000000000)
+        mstore(0x00, signature)
         mstore(0x04, caller())
         mstore(0x24, from)
         mstore(0x44, id)
         mstore(0x64, amount)
+        // @fix Currently, only empty data is passed to callback 
+        mstore(0x84, 0xa0)
+        mstore(0xa4, 0x00)
 
-        let success := call(gas(), to, 0x00, 0x00, 0x84, 0x00, 0x00)
+        let success := call(gas(), to, 0x00, 0x00, 0xc4, 0x00, 0x00)
         returndatacopy(0x00, 0x00, returndatasize())
 
         if iszero(success) { revert(0x00, 0x00) }
-        // 0x39150de8 != 0xf23a6e61
-        if iszero(eq(shr(0xe0, mload(0x00)), 0xf23a6e61)) {
+        
+        if iszero(eq(mload(0x00), signature)) {
           revert(0x00, 0x00)
         }
       }
@@ -197,11 +206,12 @@ object "ERC1155" {
         if iszero(eq(ownersLength, idsLength)) {
           revert(0x00, 0x00)
         }
-
-        // @audit Why If I start from 0x00, the tx reverts (I can start from 0x40) 
+        
+        // @audit Why If I start from 0x00, the tx reverts (I can start from 0x40)
         let memPtr := 0x80
         start := memPtr
 
+        // @audit Why should I construct the data in memory as `calldata` & not `memory`
         mstore(memPtr, 0x20) // offset
         memPtr := add(memPtr, 0x20)
 
