@@ -27,7 +27,7 @@ object "ERC1155" {
       }
       // batchMint(address,uint256[],uint256[],bytes)
       case 0xb48ab8b6 {
-        // batchMint(decodeAsAddress(0), decodeAsArray(1), decodeAsArray(2))
+        batchMint(decodeAsAddress(0), decodeAsUint(1), decodeAsUint(2))
       }
       ///////////////////////////////////////////////////////////////////////////////////////////////////
       ///                                                                                             ///
@@ -111,8 +111,8 @@ object "ERC1155" {
       function decodeAsArray(pointer) -> size {
         size := calldataload(add(4, pointer))
         if lt(calldatasize(), add(pointer, mul(size, 0x20))) {
-            revert(0, 0)
-          }
+          revert(0x00, 0x00)
+        }
       }
 
       function getSlot(slot, key1, key2) -> v {
@@ -128,6 +128,29 @@ object "ERC1155" {
         sstore(slot, amount)
 
         _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, 0x00, to, id, amount)
+      }
+
+      function batchMint(to, idsOffset, amountsOffset) {
+        if eq(to, 0x00) { revert(0x00, 0x00) }
+
+        let idsLength := decodeAsArray(idsOffset)
+        let amountsLength := decodeAsArray(amountsOffset)
+
+        if iszero(eq(amountsLength, idsLength)) {
+          revert(0x00, 0x00)
+        }
+
+        for { let i := 0x00 } lt(i, idsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+
+          let idOffset := add(iterationOffset, add(0x04, idsOffset))
+          let amountOffset := add(iterationOffset, add(0x04, amountsOffset))
+
+          let id := calldataload(idOffset)
+          let amount := calldataload(amountOffset)
+
+          mint(to, id, amount)
+        }
       }
 
       function safeTransferFrom(from, to, id, amount) {
@@ -167,7 +190,7 @@ object "ERC1155" {
       }
 
       function _onERC1155Received(signature, from, to, id, amount) {
-        if eq(extcodesize(to), 0x00) { return(0x00, 0x00) }
+        if eq(extcodesize(to), 0x00) { leave }
 
         mstore(0x00, signature)
         mstore(0x04, caller())
@@ -206,7 +229,7 @@ object "ERC1155" {
         if iszero(eq(ownersLength, idsLength)) {
           revert(0x00, 0x00)
         }
-        
+
         // @audit Why If I start from 0x00, the tx reverts (I can start from 0x40)
         let memPtr := 0x80
         start := memPtr
