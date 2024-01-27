@@ -119,13 +119,17 @@ object "ERC1155" {
         v := hash(key2, hash(slot, key1))
       }
 
-      function mint(to, id, amount) {
+      function _mint(to, id, amount) {
         if eq(to, 0x00) { revert(0x00, 0x00) }
 
         let slot := getSlot(balances(), to, id)
         let currentBalance := sload(slot)
         amount := add(amount, currentBalance)
         sstore(slot, amount)
+      }
+
+      function mint(to, id, amount) {
+        _mint(to, id, amount)
 
         _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, 0x00, to, id, amount)
       }
@@ -149,11 +153,19 @@ object "ERC1155" {
           let id := calldataload(idOffset)
           let amount := calldataload(amountOffset)
 
-          mint(to, id, amount)
+          _mint(to, id, amount)
         }
+
+        _onERC1155BatchReceived()
       }
 
       function safeTransferFrom(from, to, id, amount) {
+        _safeTransferFrom(from, to, id, amount)
+
+        _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, from, to, id, amount)
+      }
+
+      function _safeTransferFrom(from, to, id, amount) {
         if iszero(or(eq(caller(), from), isApprovedForAll(from, caller()))) {
           revert(0x00, 0x00)
         }
@@ -162,12 +174,6 @@ object "ERC1155" {
           revert(0x00, 0x00)
         }
 
-        _safeTransferFrom(from, to, id, amount)
-
-        _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, from, to, id, amount)
-      }
-
-      function _safeTransferFrom(from, to, id, amount) {
         let fromSlot := getSlot(balances(), from, id)
         let toSlot := getSlot(balances(), to, id)
 
@@ -188,6 +194,8 @@ object "ERC1155" {
         sstore(fromSlot, fromNew)
         sstore(toSlot, toNew)
       }
+
+      function _onERC1155BatchReceived(/*???*/) {}
 
       function _onERC1155Received(signature, from, to, id, amount) {
         if eq(extcodesize(to), 0x00) { leave }
