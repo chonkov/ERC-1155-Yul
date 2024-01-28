@@ -39,6 +39,11 @@ object "ERC1155" {
         safeTransferFrom(decodeAsAddress(0), decodeAsAddress(1), decodeAsUint(2), decodeAsUint(3))
         returnTrue()
       }
+      // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)
+      case 0x2eb2c2d6 {
+        safeBatchTransferFrom(decodeAsAddress(0), decodeAsAddress(1), decodeAsUint(2), decodeAsUint(3))
+        returnTrue()
+      }
       // setApprovalForAll(address,bool)
       case 0xa22cb465 {
         setApprovalForAll(decodeAsAddress(0), decodeAsBool(1))
@@ -163,6 +168,29 @@ object "ERC1155" {
         _safeTransferFrom(from, to, id, amount)
 
         _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, from, to, id, amount)
+      }
+
+      function safeBatchTransferFrom(from, to, idsOffset, amountsOffset) {
+        let idsLength := decodeAsArray(idsOffset)
+        let amountsLength := decodeAsArray(amountsOffset)
+
+        if iszero(eq(amountsLength, idsLength)) {
+          revert(0x00, 0x00)
+        }
+
+        for { let i := 0x00 } lt(i, idsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+
+          let idOffset := add(iterationOffset, add(0x04, idsOffset))
+          let amountOffset := add(iterationOffset, add(0x04, amountsOffset))
+
+          let id := calldataload(idOffset)
+          let amount := calldataload(amountOffset)
+
+          _safeTransferFrom(from, to, id, amount)
+        }
+
+        _onERC1155BatchReceived(0xbc197c8100000000000000000000000000000000000000000000000000000000, from, to, idsOffset, amountsOffset)
       }
 
       function _safeTransferFrom(from, to, id, amount) {
