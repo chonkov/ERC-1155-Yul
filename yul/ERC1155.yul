@@ -156,7 +156,7 @@ object "ERC1155" {
           _mint(to, id, amount)
         }
 
-        _onERC1155BatchReceived()
+        _onERC1155BatchReceived(0xbc197c8100000000000000000000000000000000000000000000000000000000, 0x00, to, idsOffset, amountsOffset)
       }
 
       function safeTransferFrom(from, to, id, amount) {
@@ -195,7 +195,63 @@ object "ERC1155" {
         sstore(toSlot, toNew)
       }
 
-      function _onERC1155BatchReceived(/*???*/) {}
+      function _onERC1155BatchReceived(signature, from, to, idsOffset, amountsOffset) {
+        if eq(extcodesize(to), 0x00) { leave }
+
+        let idsLength := decodeAsArray(idsOffset)
+        let amountsLength := decodeAsArray(amountsOffset)
+
+        let totalLengthOfIds := add(idsLength, 0x01)
+        let totalLengthOfAmounts := add(amountsLength, 0x01)
+
+        let _amountsOffset := mul(0x20, totalLengthOfIds)
+        let _bytesOffset := add(_amountsOffset, mul(0x20, totalLengthOfAmounts))
+
+        mstore(0x00, signature)
+        mstore(0x04, caller())
+        mstore(0x24, from)
+        mstore(0x44, 0xa0)
+        mstore(0x64, add(0xa0, _amountsOffset))
+        mstore(0x84, add(0xa0, _bytesOffset))
+
+        let memPtr := 0xa4
+
+        mstore(memPtr, idsLength)
+        memPtr := add(memPtr, 0x20)
+
+        for { let i := 0x00 } lt(i, idsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+          let currentIdOffset := add(iterationOffset, add(0x04, idsOffset))
+          let id := calldataload(currentIdOffset)
+
+          mstore(memPtr, id)
+          memPtr := add(memPtr, 0x20)
+        }
+
+        mstore(memPtr, amountsLength)
+        memPtr := add(memPtr, 0x20)
+
+        for { let i := 0x00 } lt(i, amountsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+          let currentAmountOffset := add(iterationOffset, add(0x04, amountsOffset))
+          let amount := calldataload(currentAmountOffset)
+
+          mstore(memPtr, amount)
+          memPtr := add(memPtr, 0x20)
+        }
+
+        mstore(memPtr, 0x00)
+        memPtr := add(memPtr, 0x20)
+
+        let success := call(gas(), to, 0x00, 0x00, memPtr, 0x00, 0x00)
+        returndatacopy(0x00, 0x00, returndatasize())
+
+        if iszero(success) { revert(0x00, 0x00) }
+        
+        if iszero(eq(mload(0x00), signature)) {
+          revert(0x00, 0x00)
+        }
+      }
 
       function _onERC1155Received(signature, from, to, id, amount) {
         if eq(extcodesize(to), 0x00) { leave }
