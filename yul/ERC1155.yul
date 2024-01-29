@@ -28,6 +28,7 @@ object "ERC1155" {
       // batchMint(address,uint256[],uint256[],bytes)
       case 0xb48ab8b6 {
         batchMint(decodeAsAddress(0), decodeAsUint(1), decodeAsUint(2))
+        returnTrue()
       }
       ///////////////////////////////////////////////////////////////////////////////////////////////////
       ///                                                                                             ///
@@ -136,6 +137,8 @@ object "ERC1155" {
       function mint(to, id, amount) {
         _mint(to, id, amount)
 
+        emitTransferSingle(caller(), 0x00, to, id, amount)
+
         _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, 0x00, to, id, amount)
       }
 
@@ -161,11 +164,15 @@ object "ERC1155" {
           _mint(to, id, amount)
         }
 
+        emitTransferBatch(caller(), 0x00, to, idsOffset, amountsOffset)
+
         _onERC1155BatchReceived(0xbc197c8100000000000000000000000000000000000000000000000000000000, 0x00, to, idsOffset, amountsOffset)
       }
 
       function safeTransferFrom(from, to, id, amount) {
         _safeTransferFrom(from, to, id, amount)
+
+        emitTransferSingle(caller(), from, to, id, amount)
 
         _onERC1155Received(0xf23a6e6100000000000000000000000000000000000000000000000000000000, from, to, id, amount)
       }
@@ -189,6 +196,8 @@ object "ERC1155" {
 
           _safeTransferFrom(from, to, id, amount)
         }
+
+        emitTransferBatch(caller(), from, to, idsOffset, amountsOffset)
 
         _onERC1155BatchReceived(0xbc197c8100000000000000000000000000000000000000000000000000000000, from, to, idsOffset, amountsOffset)
       }
@@ -306,6 +315,8 @@ object "ERC1155" {
       function setApprovalForAll(operator, isApproved) {
         let slot := getSlot(operatorApprovals(), caller(), operator)
         sstore(slot, isApproved)
+
+        emitApprovalForAll(caller(), operator, isApproved)
       }
 
       function balanceOf(owner, id) -> v {
@@ -354,6 +365,97 @@ object "ERC1155" {
         let slot := getSlot(operatorApprovals(), owner, operator)
         v := sload(slot)
       }
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      ///                                                                                             ///
+      ///                                         Events                                              ///
+      ///                                                                                             ///
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+      function emitApprovalForAll(owner, operator, isApproved) {
+        let signatureHash := 0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31
+
+        mstore(0x00, isApproved)
+        log3(0x00, 0x20, signatureHash, owner, operator)
+      }
+
+      function emitTransferSingle(operator, from, to, id, amount) {
+        let signatureHash := 0xc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62
+
+        mstore(0x00, id)
+        mstore(0x20, amount)
+
+        log4(0x00, 0x40, signatureHash, operator, from, to)
+      }
+
+      function emitTransferBatch(operator, from, to, idsOffset, amountsOffset) {
+        let signatureHash := 0x4a39dc06d4c0dbc64b70af90fd698a233a518aa5d07e595d983b8c0526c8f7fb
+
+        let idsLength := decodeAsArray(idsOffset)
+        let amountsLength := decodeAsArray(amountsOffset)
+
+        let memPtr := 0x00
+
+        mstore(memPtr, 0x40)
+        memPtr := add(memPtr, 0x20)
+
+        mstore(memPtr, mul(add(amountsLength, 0x03), 0x20))
+        memPtr := add(memPtr, 0x20)
+
+        // 0x
+        // 0000000000000000000000000000000000000000000000000000000000000020
+        // 0000000000000000000000000000000000000000000000000000000000000100
+        // 0000000000000000000000000000000000000000000000000000000000000005
+        // 0000000000000000000000000000000000000000000000000000000000000539
+        // 000000000000000000000000000000000000000000000000000000000000053a
+        // 000000000000000000000000000000000000000000000000000000000000053b
+        // 000000000000000000000000000000000000000000000000000000000000053c
+        // 000000000000000000000000000000000000000000000000000000000000053d
+        // 0000000000000000000000000000000000000000000000000000000000000005
+        // 0000000000000000000000000000000000000000000000000000000000000032
+        // 0000000000000000000000000000000000000000000000000000000000000064
+        // 0000000000000000000000000000000000000000000000000000000000000096
+        // 00000000000000000000000000000000000000000000000000000000000000c8
+        // 00000000000000000000000000000000000000000000000000000000000000fa
+
+        // 0000000000000000000000000000000000000000000000000000000000000000
+        // 0000000000000000000000000000000000000000000000000000000000000000
+
+        mstore(memPtr, idsLength)
+        memPtr := add(memPtr, 0x20)
+
+        for { let i := 0x00 } lt(i, idsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+          let currentIdOffset := add(iterationOffset, add(0x04, idsOffset))
+          let id := calldataload(currentIdOffset)
+
+          mstore(memPtr, id)
+          memPtr := add(memPtr, 0x20)
+        }
+
+        mstore(memPtr, amountsLength)
+        memPtr := add(memPtr, 0x20)
+
+        for { let i := 0x00 } lt(i, amountsLength) { i := add(i, 0x01) } {
+          let iterationOffset := mul(0x20, add(i, 0x01))
+          let currentAmountOffset := add(iterationOffset, add(0x04, amountsOffset))
+          let amount := calldataload(currentAmountOffset)
+
+          mstore(memPtr, amount)
+          memPtr := add(memPtr, 0x20)
+        }
+
+        log4(0x00, memPtr, signatureHash, operator, from, to)
+      }
+
+      // function emit2IndexedEvent(signatureHash, indexed1, indexed2, nonIndexed) {
+      //   mstore(0, nonIndexed)
+      //   log3(0, 0x20, signatureHash, indexed1, indexed2)
+      // }
+
+      // event TransferSingle(address indexed _operator, address indexed _from, address indexed _to, uint256 _id, uint256 _value);
+      // event TransferBatch(address indexed _operator, address indexed _from, address indexed _to, uint256[] _ids, uint256[] _values);
+      // event ApprovalForAll(address indexed _owner, address indexed _operator, bool _approved);
     }
    }
  }
