@@ -77,6 +77,12 @@ object "ERC1155" {
         revert (0x00, 0x00)
       }
 
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      ///                                                                                             ///
+      ///                                         Util functions                                      ///
+      ///                                                                                             ///
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+
       function selector() -> signature { signature := shr(0xe0, calldataload(0x00)) }
 
       function hash(slot, value) -> v {
@@ -125,14 +131,11 @@ object "ERC1155" {
         v := hash(key2, hash(slot, key1))
       }
 
-      function _mint(to, id, amount) {
-        if eq(to, 0x00) { revert(0x00, 0x00) }
-
-        let slot := getSlot(balances(), to, id)
-        let currentBalance := sload(slot)
-        amount := add(amount, currentBalance)
-        sstore(slot, amount)
-      }
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      ///                                                                                             ///
+      ///                                         Implementation of write functions                   ///
+      ///                                                                                             ///
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
 
       function mint(to, id, amount) {
         _mint(to, id, amount)
@@ -200,6 +203,28 @@ object "ERC1155" {
         emitTransferBatch(caller(), from, to, idsOffset, amountsOffset)
 
         _onERC1155BatchReceived(0xbc197c8100000000000000000000000000000000000000000000000000000000, from, to, idsOffset, amountsOffset)
+      }
+
+      function setApprovalForAll(operator, isApproved) {
+        let slot := getSlot(operatorApprovals(), caller(), operator)
+        sstore(slot, isApproved)
+
+        emitApprovalForAll(caller(), operator, isApproved)
+      }
+
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      ///                                                                                             ///
+      ///                                         Internal write functions                            ///
+      ///                                                                                             ///
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+      function _mint(to, id, amount) {
+        if eq(to, 0x00) { revert(0x00, 0x00) }
+
+        let slot := getSlot(balances(), to, id)
+        let currentBalance := sload(slot)
+        amount := add(amount, currentBalance)
+        sstore(slot, amount)
       }
 
       function _safeTransferFrom(from, to, id, amount) {
@@ -312,20 +337,18 @@ object "ERC1155" {
         }
       }
 
-      function setApprovalForAll(operator, isApproved) {
-        let slot := getSlot(operatorApprovals(), caller(), operator)
-        sstore(slot, isApproved)
-
-        emitApprovalForAll(caller(), operator, isApproved)
-      }
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
+      ///                                                                                             ///
+      ///                                         Implementation of read functions                    ///
+      ///                                                                                             ///
+      ///////////////////////////////////////////////////////////////////////////////////////////////////
 
       function balanceOf(owner, id) -> v {
         let slot := getSlot(balances(), owner, id)
         v := sload(slot)
       }
 
-      function balanceOfBatch(ownersOffset, idsOffset) -> start, end
-      {
+      function balanceOfBatch(ownersOffset, idsOffset) -> start, end {
         let ownersLength := decodeAsArray(ownersOffset)
         let idsLength := decodeAsArray(idsOffset)
 
@@ -402,25 +425,6 @@ object "ERC1155" {
         mstore(memPtr, mul(add(amountsLength, 0x03), 0x20))
         memPtr := add(memPtr, 0x20)
 
-        // 0x
-        // 0000000000000000000000000000000000000000000000000000000000000020
-        // 0000000000000000000000000000000000000000000000000000000000000100
-        // 0000000000000000000000000000000000000000000000000000000000000005
-        // 0000000000000000000000000000000000000000000000000000000000000539
-        // 000000000000000000000000000000000000000000000000000000000000053a
-        // 000000000000000000000000000000000000000000000000000000000000053b
-        // 000000000000000000000000000000000000000000000000000000000000053c
-        // 000000000000000000000000000000000000000000000000000000000000053d
-        // 0000000000000000000000000000000000000000000000000000000000000005
-        // 0000000000000000000000000000000000000000000000000000000000000032
-        // 0000000000000000000000000000000000000000000000000000000000000064
-        // 0000000000000000000000000000000000000000000000000000000000000096
-        // 00000000000000000000000000000000000000000000000000000000000000c8
-        // 00000000000000000000000000000000000000000000000000000000000000fa
-
-        // 0000000000000000000000000000000000000000000000000000000000000000
-        // 0000000000000000000000000000000000000000000000000000000000000000
-
         mstore(memPtr, idsLength)
         memPtr := add(memPtr, 0x20)
 
@@ -447,15 +451,6 @@ object "ERC1155" {
 
         log4(0x00, memPtr, signatureHash, operator, from, to)
       }
-
-      // function emit2IndexedEvent(signatureHash, indexed1, indexed2, nonIndexed) {
-      //   mstore(0, nonIndexed)
-      //   log3(0, 0x20, signatureHash, indexed1, indexed2)
-      // }
-
-      // event TransferSingle(address indexed _operator, address indexed _from, address indexed _to, uint256 _id, uint256 _value);
-      // event TransferBatch(address indexed _operator, address indexed _from, address indexed _to, uint256[] _ids, uint256[] _values);
-      // event ApprovalForAll(address indexed _owner, address indexed _operator, bool _approved);
     }
    }
  }
